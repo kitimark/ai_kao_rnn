@@ -2,11 +2,15 @@ import csv
 import numpy as np
 import deepcut
 from keras.models import Model
-from keras.layers import Input, Dense, GRU, Dropout
+from keras.layers import Input, Dense, GRU, Dropout, LSTM
 from keras.utils import to_categorical
 import matplotlib.pyplot as plt
 from random import shuffle
 from sklearn.metrics import confusion_matrix
+
+from datetime import datetime
+
+timestamp = datetime.timestamp(datetime.now())
 
 #------------------------- Read data ------------------------------
 file = open('data/dataset.csv', 'r',encoding = 'utf-8-sig')
@@ -29,8 +33,11 @@ for sentence in words:
     list = []
     for word in sentence:
         for w in word.split(' '):
-            if w != '':
-                list.append(w)
+            if w != '' and w != ',' and w != '!':
+                try:
+                    val = int(w)
+                except ValueError:
+                    list.append(w)
     sen.append(list)
 
 # cut word
@@ -46,6 +53,7 @@ for sentence in sen:
             i_kao.append(i)
     if flag != 1:
         print(sentence)
+        raise Exception('x should not exceed 5. The value of x was: {}'.format(sentence))
 
 split_sen = []
 for i, sentence in enumerate(sen):
@@ -69,10 +77,15 @@ words = split_sen
 vocab = set([w for s in sen for w in s])
 
 # write file list of words
-with open('result/list.txt', 'w', encoding='utf-8') as f:
+with open('result/list'+str(timestamp)+'.txt', 'w', encoding='utf-8') as f:
     for line in vocab:
         # print(line)
         f.write(line + '\n')
+
+with open('result/list'+str(timestamp)+'.csv', 'w', encoding='utf8', newline='') as f:
+    f_writer = csv.writer(f, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+    for line in vocab:
+        f_writer.writerow([line])
 
 pretrained_word_vec_file = open('cc.th.300.vec', 'r',encoding = 'utf-8-sig')
 count = 0
@@ -100,10 +113,14 @@ print(word_vectors.shape)
 print(word_vectors[0])
 
 #--------------- Create recurrent neural network-----------------
+# inputLayer = Input(shape=(20,300,))
+# rnn = GRU(30, activation='relu')(inputLayer)
+# rnn = Dropout(0.5)(rnn)
+# outputLayer = Dense(3, activation='softmax')(rnn)
+
 inputLayer = Input(shape=(20,300,))
-rnn = GRU(30, activation='relu')(inputLayer)
-rnn = Dropout(0.5)(rnn)
-outputLayer = Dense(3, activation='softmax')(rnn)
+lstmLayer = LSTM(64, activation='relu')(inputLayer)
+outputLayer = Dense(3, activation='softmax')(lstmLayer) 
 model = Model(inputs=inputLayer, outputs=outputLayer)
 
 model.compile(optimizer='adam',
@@ -112,6 +129,10 @@ model.compile(optimizer='adam',
 
 #----------------------- Train neural network-----------------------
 history = model.fit(word_vectors, to_categorical(labels), epochs=300, batch_size=50, validation_split = 0.2)
+
+model.save('model/model'+str(timestamp)+'.h5')
+with open('model/model'+str(timestamp)+'.json', 'w') as f:
+    f.write(model.to_json())
 
 #-------------------------- Evaluation-----------------------------
 y_pred = model.predict(word_vectors[240:,:,:])
@@ -123,3 +144,5 @@ print(cm)
 plt.plot(history.history['acc'])
 plt.plot(history.history['val_acc'])
 plt.show()
+
+print(timestamp)
